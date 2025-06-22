@@ -1,12 +1,22 @@
 "use client"
 import { Button } from "./ui/button"
 import { Activity } from "lucide-react"
-import {useRouter} from "next/navigation";
-import AuthModal from "./AuthModal";
+import { useRouter } from "next/navigation"
+import AuthModal from "./AuthModal"
+import { useSession, signOut } from "next-auth/react"
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "./ui/dropdown-menu"
+
 import React from "react"
 
 const Header = () => {
-  const navigate = useRouter();
+  const navigate = useRouter()
+  const { data: session } = useSession()
   return (
     <header className="bg-white shadow-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -17,26 +27,26 @@ const Header = () => {
               MediCare AI
             </span>
           </div>
-                    <nav className="hidden md:flex space-x-8">
-            <button 
+          <nav className="hidden md:flex space-x-8">
+            <button
               onClick={() => navigate.push("/")}
               className="text-gray-700 hover:text-blue-600 transition-colors"
             >
               Home
             </button>
-            <button 
+            <button
               onClick={() => navigate.push("/find-care")}
               className="text-gray-700 hover:text-blue-600 transition-colors"
             >
               Find Care
             </button>
-            <button 
-              onClick={() => navigate.push("/doctors")}
+            <button
+              onClick={() => navigate.push("/find-care")}
               className="text-gray-700 hover:text-blue-600 transition-colors"
             >
               Doctors
             </button>
-            <button 
+            <button
               onClick={() => navigate.push("/medical-records")}
               className="text-gray-700 hover:text-blue-600 transition-colors"
             >
@@ -45,12 +55,45 @@ const Header = () => {
           </nav>
 
           <div className="flex items-center space-x-4">
-            <AuthModal defaultTab="signin">
-              <Button variant="outline">Sign In</Button>
-            </AuthModal>
-            <AuthModal defaultTab="signup">
-              <Button>Get Started</Button>
-            </AuthModal>
+            {session ? (
+              <div className="flex items-center space-x-4">
+                <span className="font-medium text-gray-900">
+                  {session.user?.name}
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      className="relative h-10 w-10 rounded-full"
+                    >
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage
+                          src={session.user?.image ?? undefined}
+                          alt={session.user?.name ?? "User Avatar"}
+                        />
+                        <AvatarFallback>
+                          {session.user?.name?.split(" ").map((n) => n[0]).join("")}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => signOut()}>
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <>
+                <AuthModal defaultTab="signin">
+                  <Button variant="outline">Sign In</Button>
+                </AuthModal>
+                <AuthModal defaultTab="signup">
+                  <Button>Get Started</Button>
+                </AuthModal>
+              </>
+            )}
           </div>
         </div>
       </div>
