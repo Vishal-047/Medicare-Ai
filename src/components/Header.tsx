@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import AuthModal from "./AuthModal"
 import { useSession, signOut } from "next-auth/react"
 import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar"
+import { ThemeToggle } from "./ThemeToggle"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -67,6 +68,7 @@ const Header = () => {
           </nav>
 
           <div className="flex items-center space-x-4">
+          <ThemeToggle />
             {session ? (
               <div className="flex items-center space-x-4">
                 <span className="font-medium text-gray-900">
