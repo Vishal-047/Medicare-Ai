@@ -1,11 +1,12 @@
-"use client";
+"use client"
 import React from "react"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Shield, Clock, Users, Activity } from "lucide-react";
+import { ArrowRight, Shield, Clock, Users, Activity } from "lucide-react"
 import { useRouter } from "next/navigation"
+import Typewriter from "./Typewriter"
 
 const Hero = () => {
-  const navigate = useRouter();
+  const navigate = useRouter()
   return (
     <section className="relative py-20 px-4 overflow-hidden">
       <div className="max-w-7xl mx-auto">
@@ -25,10 +26,12 @@ const Hero = () => {
             <div className="flex flex-col sm:flex-row gap-4 mb-12">
               <Button
                 size="lg"
-                className="bg-blue-600 hover:bg-blue-700"
+                className="bg-blue-600 hover:bg-blue-700 animate-diagnosis-glow transition-transform duration-300 focus:ring-4 focus:ring-blue-300 focus:outline-none"
                 onClick={() => navigate.push("/speech-analysis")}
               >
-                Start Voice Analysis
+                <span className="inline-block animate-fade-in-up">
+                  Start Your AI Diagnosis
+                </span>
                 <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
               <Button
@@ -72,7 +75,17 @@ const Hero = () => {
                   Your Health Assistant
                 </h3>
                 <p className="text-gray-600">
-                  Always ready to help with your medical needs
+                  <Typewriter
+                    words={[
+                      "Always ready to help with your medical needs",
+                      "Keep track of your medical records",
+                      "Virtual Consultation at minimum rates"
+                    ]}
+                    typingSpeed={60}
+                    deletingSpeed={30}
+                    pause={1200}
+                    className="text-blue-700 font-medium text-lg"
+                  />
                 </p>
               </div>
             </div>

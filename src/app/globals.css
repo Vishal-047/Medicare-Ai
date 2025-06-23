@@ -145,3 +145,45 @@
 .animate-mic-pulse {
   animation: mic-pulse 1s infinite;
 }
+
+@keyframes diagnosis-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.7);
+  }
+  50% {
+    box-shadow: 0 0 16px 8px rgba(37, 99, 235, 0.2);
+  }
+}
+.animate-diagnosis-glow {
+  animation: diagnosis-glow 2s infinite;
+}
+@keyframes fade-in-up {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.typewriter .blinking-cursor {
+  display: inline-block;
+  width: 1ch;
+  color: #2563eb;
+  animation: blink-cursor 1s steps(2, start) infinite;
+}
+@keyframes blink-cursor {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}
