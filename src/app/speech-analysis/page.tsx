@@ -20,6 +20,13 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import Header from "@/components/Header"
 import { toast } from "sonner"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import jsPDF from "jspdf"
 
 // Define the SpeechRecognition types for broader browser support
 interface SpeechRecognitionResultList {
@@ -71,17 +78,38 @@ interface CustomWindow extends Window {
 }
 declare const window: CustomWindow
 
+const LANGUAGES = [
+  { code: "en-US", label: "English" },
+  { code: "hi-IN", label: "Hindi" },
+  { code: "mr-IN", label: "Marathi" },
+  { code: "gu-IN", label: "Gujarati" },
+  { code: "ta-IN", label: "Tamil" },
+  { code: "te-IN", label: "Telugu" },
+]
+
+interface Message {
+  role: "user" | "doctor"
+  content: string
+}
+
 const SpeechAnalysis = () => {
   const [isRecording, setIsRecording] = useState(false)
   const [transcript, setTranscript] = useState("")
-  const [analysis, setAnalysis] = useState("")
+  const [conversation, setConversation] = useState<Message[]>([
+    {
+      role: "doctor",
+      content:
+        "Hello! I am your AI doctor. Please describe your symptoms in your preferred language.",
+    },
+  ])
   const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [language, setLanguage] = useState("en-US")
   const recognitionRef = useRef<SpeechRecognition | null>(null)
-
-  // A ref to track if a recording was in progress to trigger analysis
   const wasRecordingRef = useRef(false)
+  const [prescription, setPrescription] = useState("")
+  const [showPrescription, setShowPrescription] = useState(false)
+  const [inputValue, setInputValue] = useState("")
 
-  // Setup the recognition instance
   useEffect(() => {
     const SpeechRecognition =
       window.SpeechRecognition || window.webkitSpeechRecognition
@@ -92,9 +120,9 @@ const SpeechAnalysis = () => {
     }
 
     const recognition = new SpeechRecognition()
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = "en-US"
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.lang = language
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       let finalTranscript = ""
@@ -106,11 +134,11 @@ const SpeechAnalysis = () => {
 
     recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       toast.error(`Speech recognition error: ${event.error}`)
-      setIsRecording(false) // Ensure we stop on error
+      setIsRecording(false)
     }
 
     recognition.onend = () => {
-      setIsRecording(false) // Sync state when recognition ends
+      setIsRecording(false)
     }
 
     recognitionRef.current = recognition
@@ -118,174 +146,229 @@ const SpeechAnalysis = () => {
     return () => {
       recognition.stop()
     }
-  }, [])
+  }, [language])
 
-  const analyzeSymptoms = useCallback(async () => {
-    if (!transcript.trim()) {
-      toast.info("No transcript to analyze.")
-      return
-    }
-    setIsAnalyzing(true)
-    try {
-      const response = await fetch("/api/analyze-symptoms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript }),
-      })
-
-      if (!response.ok) {
-        throw new Error("Failed to get analysis from the server.")
-      }
-
-      const data = await response.json()
-      setAnalysis(data.analysis)
-    } catch (error) {
-      toast.error("There was an error analyzing your symptoms.")
-    } finally {
-      setIsAnalyzing(false)
-    }
-  }, [transcript])
-
-  // This effect triggers the analysis when recording stops
   useEffect(() => {
-    if (wasRecordingRef.current && !isRecording) {
-      analyzeSymptoms()
+    if (transcript.trim() && wasRecordingRef.current) {
+      handleSend(transcript)
+      setTranscript("")
+      wasRecordingRef.current = false
     }
-    wasRecordingRef.current = isRecording
-  }, [isRecording, analyzeSymptoms])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transcript])
 
   const handleMicClick = () => {
     if (isRecording) {
       recognitionRef.current?.stop()
     } else {
       setTranscript("")
-      setAnalysis("")
+      wasRecordingRef.current = true
       recognitionRef.current?.start()
       setIsRecording(true)
     }
   }
 
+  const handleSend = async (userMessage: string) => {
+    if (!userMessage.trim()) return
+    setConversation((prev) => [...prev, { role: "user", content: userMessage }])
+    setIsAnalyzing(true)
+    try {
+      const response = await fetch("/api/analyze-symptoms", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          conversation: [
+            ...conversation,
+            { role: "user", content: userMessage },
+          ],
+          language,
+        }),
+      })
+      if (!response.ok)
+        throw new Error("Failed to get analysis from the server.")
+      const data = await response.json()
+      setConversation((prev) => [
+        ...prev,
+        { role: "doctor", content: data.analysis },
+      ])
+    } catch (error) {
+      toast.error("There was an error analyzing your symptoms.")
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  // Helper to format doctor's analysis (remove asterisks, add headings)
+  function formatAnalysis(text: string) {
+    return text
+      .replace(/\*\*/g, "") // Remove bold markdown
+      .replace(/\*/g, "") // Remove asterisks
+      .replace(
+        /(Possible Conditions:|Recommendations:|Red Flags:|Next Steps:|Disclaimer:)/g,
+        "\n$1\n"
+      )
+      .replace(/\n{2,}/g, "\n\n") // Normalize line breaks
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
       <Header />
-
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
-            AI Speech Analysis
-          </h1>
-          <p className="text-xl text-gray-600">
-            Describe your symptoms using voice commands for instant medical
-            insights
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Recording Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Mic className="w-6 h-6 mr-2 text-blue-600" />
-                Voice Recording
-              </CardTitle>
-              <CardDescription>
-                Click the microphone to start describing your symptoms
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="text-center">
-              <div className="mb-6">
-                <Button
-                  size="lg"
-                  onClick={handleMicClick}
-                  className={`w-32 h-32 rounded-full ${
-                    isRecording
-                      ? "bg-red-600 hover:bg-red-700 animate-pulse"
-                      : "bg-blue-600 hover:bg-blue-700"
-                  }`}
+      <div
+        className={`max-w-5xl mx-auto px-4 py-8 flex ${
+          showPrescription ? "flex-row gap-8" : "flex-col items-center"
+        }`}
+      >
+        {/* Chat Section */}
+        <div
+          className={`bg-white rounded-lg shadow p-4 h-[600px] flex flex-col w-full ${
+            showPrescription ? "max-w-2xl" : "max-w-2xl mx-auto"
+          }`}
+        >
+          <div className="flex justify-end mb-4">
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value)}
+              className="border rounded px-2 py-1"
+            >
+              {LANGUAGES.map((lang) => (
+                <option key={lang.code} value={lang.code}>
+                  {lang.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+            {conversation.map((msg, idx) => (
+              <div
+                key={idx}
+                className={msg.role === "user" ? "text-right" : "text-left"}
+              >
+                <div
+                  className={
+                    msg.role === "user"
+                      ? "inline-block bg-blue-100 text-blue-900 rounded-lg px-4 py-2 max-w-[80%]"
+                      : "inline-block bg-gray-100 text-gray-900 rounded-lg px-4 py-2 max-w-[80%]"
+                  }
                 >
-                  {isRecording ? (
-                    <MicOff className="w-12 h-12" />
-                  ) : (
-                    <Mic className="w-12 h-12" />
-                  )}
-                </Button>
-              </div>
-
-              <p className="text-gray-600 mb-4">
-                {isRecording
-                  ? "Listening... Click to stop"
-                  : "Click to start recording"}
-              </p>
-
-              {transcript && (
-                <div className="mt-6 p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-semibold mb-2 flex items-center">
-                    <Volume2 className="w-4 h-4 mr-2" />
-                    Transcript:
-                  </h4>
-                  <p className="text-gray-700 text-left">{transcript}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Analysis Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <AlertCircle className="w-6 h-6 mr-2 text-purple-600" />
-                AI Analysis
-              </CardTitle>
-              <CardDescription>
-                Medical insights based on your described symptoms
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {isAnalyzing ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                  <p className="text-gray-600">Analyzing your symptoms...</p>
-                </div>
-              ) : analysis ? (
-                <div className="space-y-4">
-                  <Alert>
-                    <CheckCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Analysis complete. Please note this is for informational
-                      purposes only and does not replace professional medical
-                      advice.
-                    </AlertDescription>
-                  </Alert>
-                  <div className="prose prose-sm max-w-none">
-                    <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">
-                      {analysis}
+                  {msg.role === "doctor" ? (
+                    <pre className="whitespace-pre-wrap text-left">
+                      {formatAnalysis(msg.content)}
                     </pre>
-                  </div>
-                  <div className="flex space-x-4 mt-6">
-                    <Button variant="outline" className="flex-1">
-                      Save to Records
-                    </Button>
-                  </div>
+                  ) : (
+                    msg.content
+                  )}
                 </div>
+              </div>
+            ))}
+            {isAnalyzing && (
+              <div className="text-left">
+                <div className="inline-block bg-gray-100 text-gray-900 rounded-lg px-4 py-2 max-w-[80%]">
+                  <span className="animate-pulse">Doctor is typing...</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <Button
+            variant="default"
+            className="w-full mb-4"
+            onClick={async () => {
+              setShowPrescription(true)
+              setPrescription("")
+              try {
+                const response = await fetch(
+                  "/api/analyze-symptoms/prescription",
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ conversation, language }),
+                  }
+                )
+                if (!response.ok)
+                  throw new Error("Failed to generate prescription.")
+                const data = await response.json()
+                setPrescription(data.prescription)
+              } catch (e) {
+                setPrescription("Failed to generate prescription.")
+              }
+            }}
+            disabled={isAnalyzing || conversation.length < 2}
+          >
+            Generate AI recommended prescription
+          </Button>
+          <div className="flex items-center gap-2 mt-2">
+            <Button
+              size="lg"
+              onClick={handleMicClick}
+              className={`w-16 h-16 rounded-full relative flex items-center justify-center transition-shadow
+                ${
+                  isRecording
+                    ? "bg-red-600 hover:bg-red-700 animate-pulse shadow-lg shadow-red-400/50"
+                    : "bg-blue-600 hover:bg-blue-700 animate-mic-glow shadow-lg shadow-blue-400/50"
+                }`}
+              disabled={isAnalyzing}
+            >
+              <span
+                className={`absolute inset-0 rounded-full pointer-events-none
+                ${isRecording ? "animate-mic-pulse" : "animate-mic-glow"}`}
+              />
+              {isRecording ? (
+                <MicOff className="w-8 h-8 z-10" />
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                  <p>Start recording to get AI-powered medical insights</p>
-                </div>
+                <Mic className="w-8 h-8 z-10" />
               )}
-            </CardContent>
-          </Card>
+            </Button>
+            <input
+              type="text"
+              className="flex-1 border rounded px-3 py-2"
+              placeholder="Type your message or use the mic..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && inputValue.trim()) {
+                  handleSend(inputValue)
+                  setInputValue("")
+                }
+              }}
+              disabled={isAnalyzing}
+            />
+            <Button
+              onClick={() => {
+                handleSend(inputValue)
+                setInputValue("")
+              }}
+              disabled={!inputValue.trim() || isAnalyzing}
+            >
+              Send
+            </Button>
+          </div>
         </div>
-
-        {/* Emergency Alert */}
-        <Alert className="mt-8 border-red-200 bg-red-50">
-          <AlertCircle className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">
-            <strong>Emergency:</strong> If you are experiencing a medical
-            emergency, please call 108 or go to the nearest emergency room
-            immediately.
-          </AlertDescription>
-        </Alert>
+        {/* Prescription Panel */}
+        {showPrescription && (
+          <div className="bg-white rounded-lg shadow p-6 h-[600px] w-full max-w-md flex flex-col justify-between">
+            <div>
+              <h2 className="text-xl font-bold mb-4 text-center">
+                AI Recommended Prescription
+              </h2>
+              <pre className="whitespace-pre-wrap text-left text-base overflow-y-auto max-h-[480px]">
+                {prescription || "Generating prescription..."}
+              </pre>
+            </div>
+            <Button
+              className="mt-4 w-full"
+              onClick={() => {
+                const doc = new jsPDF()
+                doc.setFontSize(12)
+                doc.text(prescription || "No prescription generated.", 10, 20)
+                doc.save("prescription.pdf")
+              }}
+              disabled={
+                !prescription || prescription === "Generating prescription..."
+              }
+            >
+              Download PDF
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )

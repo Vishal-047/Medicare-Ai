@@ -35,31 +35,32 @@ export async function POST(req: Request) {
       )
       .join("\n")
 
-    const prompt = `You are an empathetic, interactive, and highly qualified medical doctor. Respond in ${languageName}.
+    const prompt = `You are an experienced medical doctor. Based on the following conversation with the patient, write a formal medical prescription in ${languageName}. The prescription should include:
+- Patient name (if available)
+- Date
+- Diagnosis/Assessment
+- Medications (with dosage, frequency, and duration)
+- Advice/Instructions
+- Follow-up instructions
+- Doctor's name: Dr. Medicare AI
+- Signature: (AI generated)
 
-Instructions:
-- Greet the patient only in your very first message.
-- In follow-up messages, do NOT repeat the greeting.
-- Ask 2–3 relevant, concise questions at a time to clarify symptoms and get a complete picture.
-- As soon as you have enough information, suggest possible medications (including over-the-counter or home remedies if appropriate) and next steps.
-- If you need more details, ask your questions first, then wait for the patient's reply.
-- When you are ready, provide a structured analysis including possible conditions, recommendations, red flags, and next steps.
-- Always include a disclaimer that this is an AI analysis and not a substitute for professional medical advice at last in the final analysis.
+Do NOT use markdown, asterisks, or bullet points. Format the prescription as a real doctor would, with clear sections and line breaks. Use only plain text. If any information is missing, use placeholders or leave blank.
 
-Conversation so far:
+Conversation:
 ${chatHistory}
 
-Your next message as the doctor:`
+Write the prescription below:`
 
     const result = await model.generateContent(prompt)
     const response = await result.response
-    const analysis = await response.text()
+    const prescription = await response.text()
 
-    return NextResponse.json({ analysis })
+    return NextResponse.json({ prescription })
   } catch (error) {
     console.error(error)
     return NextResponse.json(
-      { error: "Failed to analyze symptoms" },
+      { error: "Failed to generate prescription" },
       { status: 500 }
     )
   }

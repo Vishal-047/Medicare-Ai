@@ -21,7 +21,7 @@ const Header = () => {
     <header className="bg-white shadow-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <div className="flex items-center">
+          <div className="flex items-center cursor-pointer" onClick={() => navigate.push("/")}>
             <Activity className="w-8 h-8 text-blue-600 mr-3" />
             <span className="text-2xl font-bold text-gray-900">
               MediCare AI
@@ -30,27 +30,39 @@ const Header = () => {
           <nav className="hidden md:flex space-x-8">
             <button
               onClick={() => navigate.push("/")}
-              className="text-gray-700 hover:text-blue-600 transition-colors"
+              className="text-gray-700 hover:text-blue-600 transition-colors cursor-pointer"
             >
               Home
             </button>
             <button
               onClick={() => navigate.push("/find-care")}
-              className="text-gray-700 hover:text-blue-600 transition-colors"
+              className="text-gray-700 hover:text-blue-600 transition-colors cursor-pointer"
             >
               Find Care
             </button>
             <button
-              onClick={() => navigate.push("/find-care")}
-              className="text-gray-700 hover:text-blue-600 transition-colors"
+              onClick={() => navigate.push("/doctor-directory")}
+              className="text-gray-700 hover:text-blue-600 transition-colors cursor-pointer"
             >
               Doctors
             </button>
             <button
               onClick={() => navigate.push("/medical-records")}
-              className="text-gray-700 hover:text-blue-600 transition-colors"
+              className="text-gray-700 hover:text-blue-600 transition-colors cursor-pointer"
             >
               Records
+            </button>
+            <button
+              onClick={() => navigate.push("/medical-schemes")}
+              className="text-gray-700 hover:text-blue-600 transition-colors cursor-pointer"
+            >
+              Schemes
+            </button>
+            <button
+              onClick={() => navigate.push("/join-us")}
+              className="text-gray-700 hover:text-blue-600 transition-colors cursor-pointer"
+            >
+              Join Us
             </button>
           </nav>
 
