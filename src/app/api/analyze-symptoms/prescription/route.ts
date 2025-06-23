@@ -36,7 +36,7 @@ export async function POST(req: Request) {
       .join("\n")
 
     const prompt = `You are an experienced medical doctor. Based on the following conversation with the patient, write a formal medical prescription in ${languageName}. The prescription should include:
-- Patient name (if available)
+- Patient name, age, gender (if available)
 - Date
 - Diagnosis/Assessment
 - Medications (with dosage, frequency, and duration)
