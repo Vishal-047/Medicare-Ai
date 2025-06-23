@@ -14,17 +14,19 @@ const Home = () => {
   const features = [
     {
       icon: <Mic className="w-8 h-8 text-blue-600" />,
-      title: "Speech Recognition",
+      title: "AI Based Medical Diagnose",
       description:
         "Describe your symptoms using voice commands for instant AI analysis",
       path: "/speech-analysis",
+      buttonLabel: "Get Started"
     },
     {
       icon: <Brain className="w-8 h-8 text-purple-600" />,
-      title: "AI Medical Analysis",
+      title: "AI Medical Reeport Analysis",
       description:
         "Get intelligent health insights and preliminary assessments",
       path: "/ai-analysis",
+      buttonLabel: "Start"
     },
     {
       icon: <MapPin className="w-8 h-8 text-green-600" />,
@@ -32,6 +34,7 @@ const Home = () => {
       description:
         "Locate hospitals and doctors in your area with ratings and reviews",
       path: "/find-care",
+      buttonLabel: "Find Now"
     },
     {
       icon: <FileText className="w-8 h-8 text-orange-600" />,
@@ -39,12 +42,14 @@ const Home = () => {
       description:
         "Securely store and manage your medical history and documents",
       path: "/medical-records",
+      buttonLabel: "Check"
     },
     {
       icon: <Users className="w-8 h-8 text-red-600" />,
       title: "Doctor Directory",
       description: "Browse qualified healthcare professionals by specialty",
       path: "/doctor-directory",
+      buttonLabel: "Check"
     },
     {
       icon: <Activity className="w-8 h-8 text-teal-600" />,
@@ -52,6 +57,7 @@ const Home = () => {
       description:
         "Track your health metrics and receive personalized insights",
       path: "/health-monitoring",
+      buttonLabel: "Start"
     },
   ]
 
@@ -71,7 +77,7 @@ const Home = () => {
             designed to make medical care more accessible and efficient.
           </p>
         </div>
-
+      
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {features.map((feature, index) => (
             <FeatureCard
@@ -80,6 +86,7 @@ const Home = () => {
               title={feature.title}
               description={feature.description}
               onClick={() => navigate.push(feature.path)}
+              buttonLabel={feature.buttonLabel}
             />
           ))}
         </div>
