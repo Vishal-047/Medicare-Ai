@@ -16,7 +16,17 @@ import {
   CheckCircle,
   MapPin,
   Hospital,
+  Send,
+  X,
+  MessageSquarePlus,
 } from "lucide-react"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import Header from "@/components/Header"
 import { toast } from "sonner"
@@ -210,8 +220,43 @@ const SpeechAnalysis = () => {
       .replace(/\n{2,}/g, "\n\n") // Normalize line breaks
   }
 
+  const generatePrescription = async () => {
+    setShowPrescription(true)
+    setPrescription("") // Clear previous prescription
+    try {
+      const response = await fetch("/api/analyze-symptoms/prescription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversation, language }),
+      })
+      if (!response.ok) {
+        throw new Error("Failed to generate prescription.")
+      }
+      const data = await response.json()
+      setPrescription(data.prescription)
+    } catch (e) {
+      toast.error("Failed to generate prescription. Please try again.")
+      setPrescription("Could not generate a prescription at this time.")
+    }
+  }
+
+  const handleNewChat = () => {
+    setConversation([
+      {
+        role: "doctor",
+        content:
+          "Hello! I am your AI doctor. Please describe your symptoms in your preferred language.",
+      },
+    ])
+    setShowPrescription(false)
+    setInputValue("")
+    if (isRecording) {
+      recognitionRef.current?.stop()
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white">
+    <div className="min-h-screen bg-background text-foreground">
       <Header />
       <div
         className={`max-w-5xl mx-auto px-4 py-8 flex ${
@@ -220,38 +265,45 @@ const SpeechAnalysis = () => {
       >
         {/* Chat Section */}
         <div
-          className={`bg-white rounded-lg shadow p-4 h-[600px] flex flex-col w-full ${
+          className={`bg-card rounded-2xl shadow-lg p-6 h-[70vh] flex flex-col w-full ${
             showPrescription ? "max-w-2xl" : "max-w-2xl mx-auto"
           }`}
         >
-          <div className="flex justify-end mb-4">
-            <select
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className="border rounded px-2 py-1"
-            >
-              {LANGUAGES.map((lang) => (
-                <option key={lang.code} value={lang.code}>
-                  {lang.label}
-                </option>
-              ))}
-            </select>
+          <div className="flex justify-between items-center mb-4">
+            <Button variant="outline" onClick={handleNewChat}>
+              <MessageSquarePlus className="w-4 h-4 mr-2" />
+              New Chat
+            </Button>
+            <Select value={language} onValueChange={setLanguage}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Select language" />
+              </SelectTrigger>
+              <SelectContent>
+                {LANGUAGES.map((lang) => (
+                  <SelectItem key={lang.code} value={lang.code}>
+                    {lang.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-          <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+          <div className="flex-1 overflow-y-auto space-y-6 mb-4 pr-4">
             {conversation.map((msg, idx) => (
               <div
                 key={idx}
-                className={msg.role === "user" ? "text-right" : "text-left"}
+                className={`flex items-end gap-2 ${
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                }`}
               >
                 <div
-                  className={
+                  className={`rounded-2xl px-5 py-3 max-w-[80%] ${
                     msg.role === "user"
-                      ? "inline-block bg-blue-100 text-blue-900 rounded-lg px-4 py-2 max-w-[80%]"
-                      : "inline-block bg-gray-100 text-gray-900 rounded-lg px-4 py-2 max-w-[80%]"
-                  }
+                      ? "bg-primary text-primary-foreground rounded-br-none"
+                      : "bg-muted text-muted-foreground rounded-bl-none"
+                  }`}
                 >
                   {msg.role === "doctor" ? (
-                    <pre className="whitespace-pre-wrap text-left">
+                    <pre className="whitespace-pre-wrap font-sans text-left">
                       {formatAnalysis(msg.content)}
                     </pre>
                   ) : (
@@ -261,8 +313,8 @@ const SpeechAnalysis = () => {
               </div>
             ))}
             {isAnalyzing && (
-              <div className="text-left">
-                <div className="inline-block bg-gray-100 text-gray-900 rounded-lg px-4 py-2 max-w-[80%]">
+              <div className="flex items-end gap-2 justify-start">
+                <div className="bg-muted text-muted-foreground rounded-2xl px-5 py-3 max-w-[80%] rounded-bl-none">
                   <span className="animate-pulse">Doctor is typing...</span>
                 </div>
               </div>
@@ -271,55 +323,28 @@ const SpeechAnalysis = () => {
           <Button
             variant="default"
             className="w-full mb-4"
-            onClick={async () => {
-              setShowPrescription(true)
-              setPrescription("")
-              try {
-                const response = await fetch(
-                  "/api/analyze-symptoms/prescription",
-                  {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ conversation, language }),
-                  }
-                )
-                if (!response.ok)
-                  throw new Error("Failed to generate prescription.")
-                const data = await response.json()
-                setPrescription(data.prescription)
-              } catch (e) {
-                setPrescription("Failed to generate prescription.")
-              }
-            }}
+            onClick={generatePrescription}
             disabled={isAnalyzing || conversation.length < 2}
           >
             Generate AI recommended prescription
           </Button>
-          <div className="flex items-center gap-2 mt-2">
+          <div className="flex items-center gap-2 p-2 rounded-lg border bg-input focus-within:ring-2 focus-within:ring-ring">
             <Button
-              size="lg"
+              size="icon"
+              variant="ghost"
               onClick={handleMicClick}
-              className={`w-16 h-16 rounded-full relative flex items-center justify-center transition-shadow
-                ${
-                  isRecording
-                    ? "bg-red-600 hover:bg-red-700 animate-pulse shadow-lg shadow-red-400/50"
-                    : "bg-blue-600 hover:bg-blue-700 animate-mic-glow shadow-lg shadow-blue-400/50"
-                }`}
+              className={`w-12 h-12 rounded-full flex-shrink-0 ${
+                isRecording
+                  ? "bg-red-500/20 text-red-500 animate-pulse"
+                  : "text-muted-foreground"
+              }`}
               disabled={isAnalyzing}
             >
-              <span
-                className={`absolute inset-0 rounded-full pointer-events-none
-                ${isRecording ? "animate-mic-pulse" : "animate-mic-glow"}`}
-              />
-              {isRecording ? (
-                <MicOff className="w-8 h-8 z-10" />
-              ) : (
-                <Mic className="w-8 h-8 z-10" />
-              )}
+              <Mic className="w-6 h-6" />
             </Button>
             <input
               type="text"
-              className="flex-1 border rounded px-3 py-2"
+              className="flex-1 bg-transparent focus:outline-none text-foreground placeholder:text-muted-foreground"
               placeholder="Type your message or use the mic..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
@@ -332,24 +357,35 @@ const SpeechAnalysis = () => {
               disabled={isAnalyzing}
             />
             <Button
+              variant="ghost"
+              size="icon"
               onClick={() => {
                 handleSend(inputValue)
                 setInputValue("")
               }}
               disabled={!inputValue.trim() || isAnalyzing}
+              className="w-12 h-12 rounded-full flex-shrink-0 text-primary"
             >
-              Send
+              <Send className="w-6 h-6" />
             </Button>
           </div>
         </div>
         {/* Prescription Panel */}
         {showPrescription && (
-          <div className="bg-white rounded-lg shadow p-6 h-[600px] w-full max-w-md flex flex-col justify-between">
+          <div className="relative bg-card rounded-2xl shadow-lg p-6 h-[70vh] w-full max-w-md flex flex-col justify-between">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-4 right-4 text-muted-foreground"
+              onClick={() => setShowPrescription(false)}
+            >
+              <X className="w-5 h-5" />
+            </Button>
             <div>
               <h2 className="text-xl font-bold mb-4 text-center">
                 AI Recommended Prescription
               </h2>
-              <pre className="whitespace-pre-wrap text-left text-base overflow-y-auto max-h-[480px]">
+              <pre className="whitespace-pre-wrap font-sans text-left text-base overflow-y-auto max-h-[calc(70vh-150px)] bg-muted p-4 rounded-lg">
                 {prescription || "Generating prescription..."}
               </pre>
             </div>
