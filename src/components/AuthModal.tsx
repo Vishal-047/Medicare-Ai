@@ -24,6 +24,10 @@ import {
 } from "@/components/ui/input-otp"
 import PhoneInput from "react-phone-number-input"
 import "react-phone-number-input/style.css"
+import {
+  RadioGroup,
+  RadioGroupItem,
+} from "@/components/ui/radio-group"
 
 const PasswordStrengthIndicator = ({ password }: { password: string }) => {
   const checks = [
@@ -64,6 +68,7 @@ interface AuthModalProps {
 }
 
 type AuthStep = "details" | "otp"
+type LoginMethod = "email" | "phone"
 
 const AuthModal = ({ children, defaultTab = "signin" }: AuthModalProps) => {
   const [open, setOpen] = useState(false)
@@ -78,6 +83,7 @@ const AuthModal = ({ children, defaultTab = "signin" }: AuthModalProps) => {
 
   // Login state
   const [loginStep, setLoginStep] = useState<AuthStep>("details")
+  const [loginMethod, setLoginMethod] = useState<LoginMethod>("email")
 
   // Sign up state
   const [signupStep, setSignupStep] = useState<AuthStep>("details")
@@ -185,15 +191,11 @@ const AuthModal = ({ children, defaultTab = "signin" }: AuthModalProps) => {
     setIsLoading(true)
 
     try {
-      const isPhone = /^\d{10,}$/.test(emailOrPhone) && !emailOrPhone.includes("@")
-      const formattedIdentifier =
-        isPhone && !emailOrPhone.startsWith("+")
-          ? `+91${emailOrPhone}`
-          : emailOrPhone
+      const identifier = loginMethod === "email" ? emailOrPhone : phoneNumber
 
       // Step 1: Send credentials. Expect an error that indicates OTP is required.
       const res = await signIn("credentials", {
-        emailOrPhone: formattedIdentifier,
+        emailOrPhone: identifier,
         password,
         redirect: false,
       })
@@ -205,6 +207,8 @@ const AuthModal = ({ children, defaultTab = "signin" }: AuthModalProps) => {
           setEmail(emailFromServer) // Store email for the OTP verification step
           toast.success("OTP sent to your registered phone number.")
           setLoginStep("otp")
+          setLoginMethod("phone")
+          setSignupStep("details")
         } else {
           // This is a real error like "Incorrect password."
           toast.error(res.error)
@@ -231,7 +235,6 @@ const AuthModal = ({ children, defaultTab = "signin" }: AuthModalProps) => {
 
       if (res?.error) {
         toast.error(res.error)
-        setLoginStep("details") // Go back on failure
       } else {
         toast.success("Login successful")
         setOpen(false)
@@ -250,6 +253,7 @@ const AuthModal = ({ children, defaultTab = "signin" }: AuthModalProps) => {
     setPassword("")
     setOtp("")
     setLoginStep("details")
+    setLoginMethod("email")
     setSignupStep("details")
     // also reset signup fields
     setConfirmPassword("")
@@ -293,23 +297,48 @@ const AuthModal = ({ children, defaultTab = "signin" }: AuthModalProps) => {
           <TabsContent value="signin" className="space-y-4">
             {loginStep === "details" && (
               <form onSubmit={handleSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="signin-email">Email or Phone Number</Label>
-                  <Input
-                    id="signin-email"
-                    placeholder="Enter your email or phone number"
-                    value={emailOrPhone}
-                    onChange={(e) => {
-                      setEmailOrPhone(e.target.value)
-                      // also set email if it's an email for the next step
-                      if (e.target.value.includes("@")) {
-                        setEmail(e.target.value)
-                      }
-                    }}
-                    required
-                    disabled={isLoading}
-                  />
-                </div>
+                <RadioGroup
+                  value={loginMethod}
+                  onValueChange={(value) => setLoginMethod(value as LoginMethod)}
+                  className="flex items-center space-x-4 py-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="email" id="login-email" />
+                    <Label htmlFor="login-email">Email</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="phone" id="login-phone" />
+                    <Label htmlFor="login-phone">Phone</Label>
+                  </div>
+                </RadioGroup>
+
+                {loginMethod === "email" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-email">Email</Label>
+                    <Input
+                      id="signin-email"
+                      placeholder="Enter your email"
+                      value={emailOrPhone}
+                      onChange={(e) => setEmailOrPhone(e.target.value)}
+                      required
+                      disabled={isLoading}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-phone">Phone Number</Label>
+                    <PhoneInput
+                      id="signin-phone"
+                      placeholder="Enter phone number"
+                      value={phoneNumber}
+                      onChange={(value) => setPhoneNumber(value || "")}
+                      defaultCountry="IN"
+                      className="input"
+                      disabled={isLoading}
+                    />
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label htmlFor="signin-password">Password</Label>
                   <Input
