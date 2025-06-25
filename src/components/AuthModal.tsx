@@ -3,6 +3,7 @@ import React, { useState } from "react"
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
@@ -12,23 +13,77 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import axios from "axios"
+import axios, { AxiosError } from "axios"
 import { useRouter } from "next/navigation"
 import { signIn } from "next-auth/react"
 import { MapPin, Check } from "lucide-react"
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@/components/ui/input-otp"
+import PhoneInput from "react-phone-number-input"
+import "react-phone-number-input/style.css"
+
+const PasswordStrengthIndicator = ({ password }: { password: string }) => {
+  const checks = [
+    { label: "At least 8 characters", regex: /.{8,}/ },
+    { label: "At least one uppercase letter", regex: /[A-Z]/ },
+    { label: "At least one lowercase letter", regex: /[a-z]/ },
+    { label: "At least one number", regex: /[0-9]/ },
+    { label: "At least one special character", regex: /[@$!%*?&]/ },
+  ]
+
+  return (
+    <div className="space-y-1 text-sm">
+      {checks.map((check, index) => (
+        <div key={index} className="flex items-center">
+          {check.regex.test(password) ? (
+            <Check className="w-4 h-4 mr-2 text-green-500" />
+          ) : (
+            <div className="w-4 h-4 mr-2" /> // Placeholder for alignment
+          )}
+          <span
+            className={
+              check.regex.test(password)
+                ? "text-muted-foreground"
+                : "text-foreground"
+            }
+          >
+            {check.label}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 interface AuthModalProps {
   children: React.ReactNode
   defaultTab?: "signin" | "signup"
 }
 
+type AuthStep = "details" | "otp"
+
 const AuthModal = ({ children, defaultTab = "signin" }: AuthModalProps) => {
   const [open, setOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<"signin" | "signup">(defaultTab)
+
+  // Common state
   const [email, setEmail] = useState("")
+  const [emailOrPhone, setEmailOrPhone] = useState("")
   const [password, setPassword] = useState("")
+  const [otp, setOtp] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+
+  // Login state
+  const [loginStep, setLoginStep] = useState<AuthStep>("details")
+
+  // Sign up state
+  const [signupStep, setSignupStep] = useState<AuthStep>("details")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [name, setName] = useState("")
+  const [phoneNumber, setPhoneNumber] = useState("")
   const [location, setLocation] = useState<{
     latitude: number
     longitude: number
@@ -77,67 +132,157 @@ const AuthModal = ({ children, defaultTab = "signin" }: AuthModalProps) => {
     )
   }
 
+  // New handler to request OTP for signup
+  const handleRequestSignupOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (password !== confirmPassword) {
+      toast.error("Passwords don't match!")
+      return
+    }
+    setIsLoading(true)
+    try {
+      const userData = { name, email, password, phoneNumber }
+      await axios.post("/api/auth/send-otp", userData)
+      toast.success("OTP has been sent to your phone.")
+      setSignupStep("otp")
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message: string }>
+      toast.error(
+        axiosError.response?.data?.message || "Failed to send OTP."
+      )
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Renamed from handleSignUp to reflect its new purpose
+  const handleVerifySignup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    try {
+      await axios.post("/api/signup", { email, otp })
+      toast.success("Account created successfully! Please sign in.")
+      // Reset form and switch to signin
+      setPassword("")
+      setConfirmPassword("")
+      setName("")
+      setPhoneNumber("")
+      setOtp("")
+      setSignupStep("details")
+      setActiveTab("signin")
+    } catch (error) {
+      const axiosError = error as AxiosError<{ message: string }>
+      toast.error(
+        axiosError.response?.data?.message || "Failed to verify OTP."
+      )
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
+    setIsLoading(true)
+
     try {
+      const isPhone = /^\d{10,}$/.test(emailOrPhone) && !emailOrPhone.includes("@")
+      const formattedIdentifier =
+        isPhone && !emailOrPhone.startsWith("+")
+          ? `+91${emailOrPhone}`
+          : emailOrPhone
+
+      // Step 1: Send credentials. Expect an error that indicates OTP is required.
       const res = await signIn("credentials", {
-        email,
+        emailOrPhone: formattedIdentifier,
         password,
         redirect: false,
       })
+
       if (res?.error) {
-        toast.error("Invalid credentials")
+        if (res.error.startsWith("OTP_REQUIRED")) {
+          // This is the expected "error" for the first step.
+          const emailFromServer = res.error.split(":")[1]
+          setEmail(emailFromServer) // Store email for the OTP verification step
+          toast.success("OTP sent to your registered phone number.")
+          setLoginStep("otp")
+        } else {
+          // This is a real error like "Incorrect password."
+          toast.error(res.error)
+        }
+      }
+      // On a successful password check, we no longer fall through to here.
+      // The session is not created yet.
+    } catch (error) {
+      toast.error("An unknown error occurred during login.")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerifyLoginOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    try {
+      const res = await signIn("otp", {
+        email: email, // We use the email we stored from the first step
+        otp,
+        redirect: false,
+      })
+
+      if (res?.error) {
+        toast.error(res.error)
+        setLoginStep("details") // Go back on failure
       } else {
         toast.success("Login successful")
         setOpen(false)
         router.refresh()
       }
     } catch (error) {
-      toast.error("An error occurred")
+      toast.error("An error occurred during OTP verification.")
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (password !== confirmPassword) {
-      toast.error("Passwords don't match!")
-      return
-    }
-    try {
-      const userData = {
-        name,
-        email,
-        password,
-        location: location
-          ? {
-              type: "Point",
-              coordinates: [location.longitude, location.latitude],
-            }
-          : undefined,
-      }
-      const res = await axios.post("/api/signup", userData)
-      if (res.status === 201) {
-        toast.success("User created successfully. Please sign in.")
-        setPassword("")
-        setConfirmPassword("")
-        setName("")
-        setActiveTab("signin")
-      }
-    } catch (error) {
-      toast.error("Error creating user")
-    }
+  const resetAuthState = () => {
+    setEmail("")
+    setEmailOrPhone("")
+    setPassword("")
+    setOtp("")
+    setLoginStep("details")
+    setSignupStep("details")
+    // also reset signup fields
+    setConfirmPassword("")
+    setName("")
+    setPhoneNumber("")
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        setOpen(isOpen)
+        if (!isOpen) {
+          resetAuthState()
+        }
+      }}
+    >
       <DialogTrigger asChild>{children}</DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Welcome to MediCare AI</DialogTitle>
+          <DialogDescription>
+            {activeTab === "signin"
+              ? "Sign in to your account to continue."
+              : "Create an account to get started."}
+          </DialogDescription>
         </DialogHeader>
         <Tabs
           value={activeTab}
-          onValueChange={(value) => setActiveTab(value as "signin" | "signup")}
+          onValueChange={(value) => {
+            setActiveTab(value as "signin" | "signup")
+            resetAuthState()
+          }}
           className="w-full"
         >
           <TabsList className="grid w-full grid-cols-2">
@@ -146,111 +291,138 @@ const AuthModal = ({ children, defaultTab = "signin" }: AuthModalProps) => {
           </TabsList>
 
           <TabsContent value="signin" className="space-y-4">
-            <form onSubmit={handleSignIn} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signin-email">Email</Label>
-                <Input
-                  id="signin-email"
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="signin-password">Password</Label>
-                <Input
-                  id="signin-password"
-                  type="password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full">
-                Sign In
-              </Button>
-            </form>
+            {loginStep === "details" && (
+              <form onSubmit={handleSignIn} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signin-email">Email or Phone Number</Label>
+                  <Input
+                    id="signin-email"
+                    placeholder="Enter your email or phone number"
+                    value={emailOrPhone}
+                    onChange={(e) => {
+                      setEmailOrPhone(e.target.value)
+                      // also set email if it's an email for the next step
+                      if (e.target.value.includes("@")) {
+                        setEmail(e.target.value)
+                      }
+                    }}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signin-password">Password</Label>
+                  <Input
+                    id="signin-password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Sending OTP..." : "Sign In"}
+                </Button>
+              </form>
+            )}
+            {loginStep === "otp" && (
+              <form
+                onSubmit={handleVerifyLoginOtp}
+                className="space-y-6 flex flex-col items-center"
+              >
+                <Label htmlFor="otp-input">Enter OTP</Label>
+                <p className="text-sm text-muted-foreground">
+                  An OTP has been sent to your registered phone.
+                </p>
+                <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Verifying..." : "Verify & Sign In"}
+                </Button>
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => setLoginStep("details")}
+                >
+                  Back to login
+                </Button>
+              </form>
+            )}
           </TabsContent>
 
-          <TabsContent value="signup" className="space-y-4">
-            <form onSubmit={handleSignUp} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="signup-name">Full Name</Label>
-                <Input
-                  id="signup-name"
-                  type="text"
-                  placeholder="Enter your full name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="signup-email">Email</Label>
-                <Input
-                  id="signup-email"
-                  type="email"
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="signup-password">Password</Label>
-                <Input
-                  id="signup-password"
-                  type="password"
-                  placeholder="Create a password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm Password</Label>
-                <Input
-                  id="confirm-password"
-                  type="password"
-                  placeholder="Confirm your password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full flex items-center justify-center"
-                  onClick={handleGetLocation}
-                  disabled={isGettingLocation || !!location}
-                >
-                  {isGettingLocation ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900 mr-2"></div>
-                      Getting Location...
-                    </>
-                  ) : location ? (
-                    <>
-                      <Check className="w-4 h-4 mr-2 text-green-600" />
-                      Location Captured
-                    </>
-                  ) : (
-                    <>
-                      <MapPin className="w-4 h-4 mr-2" />
-                      Get Location for Nearby Care
-                    </>
-                  )}
+          <TabsContent value="signup">
+            {signupStep === "details" && (
+              <form onSubmit={handleRequestSignupOtp} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signup-name">Full Name</Label>
+                  <Input id="signup-name" value={name} onChange={(e) => setName(e.target.value)} required disabled={isLoading} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email">Email</Label>
+                  <Input id="signup-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required disabled={isLoading} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-phone">Phone Number</Label>
+                  <PhoneInput
+                    id="signup-phone"
+                    placeholder="Enter phone number"
+                    value={phoneNumber}
+                    onChange={(value) => setPhoneNumber(value || "")}
+                    defaultCountry="IN"
+                    className="input" // Basic styling, can be improved
+                    disabled={isLoading}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password">Password</Label>
+                  <Input id="signup-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required disabled={isLoading} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-confirm-password">Confirm Password</Label>
+                  <Input id="signup-confirm-password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required disabled={isLoading} />
+                </div>
+                {/* Password strength indicator */}
+                {password && <PasswordStrengthIndicator password={password} />}
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Sending OTP..." : "Get OTP"}
                 </Button>
-              </div>
-              <Button type="submit" className="w-full">
-                Get Started
-              </Button>
-            </form>
+              </form>
+            )}
+
+            {signupStep === "otp" && (
+              <form onSubmit={handleVerifySignup} className="space-y-6 flex flex-col items-center">
+                <Label htmlFor="otp-input">Enter OTP</Label>
+                <p className="text-sm text-muted-foreground">
+                  An OTP has been sent to {phoneNumber}.
+                </p>
+                <InputOTP maxLength={6} value={otp} onChange={setOtp}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Verifying..." : "Verify & Sign Up"}
+                </Button>
+                <Button variant="link" size="sm" onClick={() => setSignupStep("details")}>
+                  Back to details
+                </Button>
+              </form>
+            )}
           </TabsContent>
         </Tabs>
       </DialogContent>

@@ -4,6 +4,10 @@ export interface IUser extends Document {
   name: string
   email: string
   password: string
+  phoneNumber: string
+  isVerified: boolean
+  otp?: string | null
+  otpExpires?: Date | null
   createdAt: Date
   updatedAt: Date
   location?: {
@@ -23,10 +27,27 @@ const userSchema = new Schema<IUser>(
       required: true,
       unique: true,
     },
+    phoneNumber: {
+      type: String,
+      required: true,
+      unique: true,
+    },
     password: {
       type: String,
       required: true,
       minlength: 8,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+    otp: {
+      type: String,
+      default: null,
+    },
+    otpExpires: {
+      type: Date,
+      default: null,
     },
     location: {
       type: {
